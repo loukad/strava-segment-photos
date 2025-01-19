@@ -1,0 +1,19 @@
+
+{
+  "manifest_version": 3,
+  "name": "Strava Segment Photos",
+  "version": "1.0",
+  "description": "Adds a Photos column to the Strava leaderboard that shows any photos from the corresponding activities.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["https://www.strava.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.strava.com/segments/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
