@@ -1,3 +1,13 @@
+// ==UserScript==
+// @name         Leaderboard Photos
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  Adds a "Photos" column to the leaderboard table and fetches photos dynamically.
+// @author       Louka
+// @match        https://www.strava.com/*
+// @grant        GM_xmlhttpRequest
+// @connect      strava.com
+// ==/UserScript==
 (async function () {
   const leaderboardTableSelector = "table.table-leaderboard";
 
