@@ -13,6 +13,24 @@
   const popupSelector = ".mapboxgl-popup-content";
   let isUpdatingPopup = false; // Flag to track updates
 
+  function createProgressBar(parent) {
+    const progressBar = document.createElement("div");
+    progressBar.style.width = "100%";
+    progressBar.style.height = "5px";
+    progressBar.style.background = "#ccc";
+    progressBar.style.position = "relative";
+    progressBar.style.marginTop = "5px";
+
+    const progress = document.createElement("div");
+    progress.style.height = "100%";
+    progress.style.width = "0%";
+    progress.style.background = "#4caf50";
+    progress.style.transition = "width 0.3s ease";
+    progressBar.appendChild(progress);
+    parent.appendChild(progressBar);
+    return progress;
+  }
+
   async function addPhotosToLeaderboard() {
     const leaderboardTable = document.querySelector(leaderboardTableSelector);
     if (!leaderboardTable) return;
@@ -89,15 +107,18 @@
       // Insert imagesContainer into the correct parent
       const segmentParent = segmentLink.parentElement.parentElement;
       if (segmentParent) {
-          segmentParent.insertBefore(imagesContainer, segmentParent.firstChild);
+        segmentParent.insertBefore(imagesContainer, segmentParent.firstChild);
       }
 
+      const progressBar = createProgressBar(imagesContainer);
       const effortsResponse = await fetch(`https://www.strava.com/segments/${segmentId}`);
       const effortsHtml = await effortsResponse.text();
       const parser = new DOMParser();
       const doc = parser.parseFromString(effortsHtml, "text/html");
-      const effortLinks = doc.querySelectorAll('a[href*="/segment_efforts/"]');
-      for (const link of effortLinks) {
+      const effortLinks = Array.from(doc.querySelectorAll('a[href*="/segment_efforts/"]'));
+      let completed = 0;
+
+      await Promise.all(effortLinks.map(async (link) => {
         const effortUrl = link.getAttribute("href");
         const activityBody = await getActivityFromSegmentEffort(effortUrl);
         const photos = getPhotosFromActivityBody(activityBody);
@@ -117,7 +138,9 @@
           link.appendChild(img);
           imagesGrid.appendChild(link);
         });
-      }
+        completed++;
+        progressBar.style.width = `${(completed / effortLinks.length) * 100}%`;
+      }));
     } catch (error) {
       console.error("Error fetching popup photos:", error);
     } finally {
