@@ -12,6 +12,7 @@
   const leaderboardTableSelector = "table.table-leaderboard";
   const popupSelector = ".mapboxgl-popup-content";
   let isUpdatingPopup = false; // Flag to track updates
+  let popupCreated = false;
 
   function createProgressBar(parent) {
     const progressBar = document.createElement("div");
@@ -28,7 +29,7 @@
     progress.style.transition = "width 0.3s ease";
     progressBar.appendChild(progress);
     parent.appendChild(progressBar);
-    return progress;
+    return [progress, progressBar];
   }
 
   async function addPhotosToLeaderboard() {
@@ -73,15 +74,20 @@
       const popup = document.querySelector(popupSelector);
       if (!popup) return;
 
-      const segmentLink = popup.querySelector('[class^="SegmentDetailsPopup"] a');
+      const segmentLink = popup.querySelector('[class^="SegmentDetailsPopup_cta"] a');
       if (!segmentLink) return;
 
       const segmentIdMatch = segmentLink.href.match(/segments\/(\d+)/);
       if (!segmentIdMatch) return;
       const segmentId = segmentIdMatch[1];
 
+      // Check if images have already been added (by checking for the imagesContainer)
+      const existingImagesContainer = popup.querySelector(".images-container");
+      if (existingImagesContainer) return;
+
       // Create the images container
       const imagesContainer = document.createElement("div");
+      imagesContainer.classList.add("images-container");  // Add a class to track the container
       imagesContainer.style.display = "flex"; // Ensure it aligns well with flex parent
       imagesContainer.style.flexDirection = "column"; // Stack images container above the button
       imagesContainer.style.width = "100%"; // Take full width
@@ -110,7 +116,7 @@
         segmentParent.insertBefore(imagesContainer, segmentParent.firstChild);
       }
 
-      const progressBar = createProgressBar(imagesContainer);
+      const [progress, progressBar] = createProgressBar(imagesContainer);
       const effortsResponse = await fetch(`https://www.strava.com/segments/${segmentId}`);
       const effortsHtml = await effortsResponse.text();
       const parser = new DOMParser();
@@ -139,8 +145,22 @@
           imagesGrid.appendChild(link);
         });
         completed++;
-        progressBar.style.width = `${(completed / effortLinks.length) * 100}%`;
+        progress.style.width = `${(completed / effortLinks.length) * 100}%`;
       }));
+
+      progressBar.remove();
+
+      // Add a mutation observer on the segment details changing
+      const segmentDetailsDiv = popup.querySelector('[class^="SegmentDetailsPopup_segmentDetails"]');
+      if (segmentDetailsDiv) {
+        const observer = new MutationObserver(() => {
+          // Remove the images container when the segment details change.  This will in turn trigger
+          // an observer change that will add the photos to the updated segment popup.
+          imagesContainer.remove();
+          observer.disconnect();
+        });
+        observer.observe(segmentDetailsDiv, { childList: true, subtree: true, attributes: true });
+      }
     } catch (error) {
       console.error("Error fetching popup photos:", error);
     } finally {
