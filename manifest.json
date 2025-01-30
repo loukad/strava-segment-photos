@@ -12,7 +12,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.strava.com/segments/*"],
+      "matches": ["https://www.strava.com/segments/*", "https://www.strava.com/maps/*"],
       "js": ["content.js"]
     }
   ]

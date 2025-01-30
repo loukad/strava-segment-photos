@@ -10,14 +10,12 @@
 // ==/UserScript==
 (async function () {
   const leaderboardTableSelector = "table.table-leaderboard";
+  const popupSelector = ".mapboxgl-popup-content";
+  let isUpdatingPopup = false; // Flag to track updates
 
-  // Main function to add the photos column and populate images
-  async function addPhotosColumn() {
+  async function addPhotosToLeaderboard() {
     const leaderboardTable = document.querySelector(leaderboardTableSelector);
-    if (!leaderboardTable) {
-      console.error("Leaderboard table not found!");
-      return;
-    }
+    if (!leaderboardTable) return;
 
     const headerRow = leaderboardTable.querySelector("thead tr");
     if (!headerRow.querySelector("th.photos-header")) {
@@ -29,87 +27,129 @@
 
     const rows = leaderboardTable.querySelectorAll("tbody tr");
     for (const row of rows) {
-      if (row.querySelector("td.photos-cell")) continue; // Skip rows already processed
-
+      if (row.querySelector("td.photos-cell")) continue;
       const effortCell = row.querySelector('td a[href*="/segment_efforts/"]');
       if (!effortCell) continue;
-
       const effortUrl = effortCell.getAttribute("href");
       const photosCell = document.createElement("td");
       photosCell.classList.add("photos-cell");
       photosCell.innerText = "Loading...";
       row.appendChild(photosCell);
-
       try {
         const activityBody = await getActivityFromSegmentEffort(effortUrl);
         const photos = getPhotosFromActivityBody(activityBody);
-
-        if (photos.length > 0) {
-          photosCell.innerHTML = photos
-            .map(
-              (photoUrl) =>
-                `<a href="${photoUrl}" target="_blank">
-                   <img src="${photoUrl}" alt="Thumbnail" style="width: 32px; height: 32px; margin-right: 5px;">
-                 </a>`
-            )
-            .join("");
-        } else {
-          photosCell.innerText = "No Photos";
-        }
-      } catch (error) {
-        console.error("Error fetching photos:", error);
+        photosCell.innerHTML = photos.length
+          ? photos.map(photoUrl => `<a href="${photoUrl}" target="_blank"><img src="${photoUrl}" style="width: 32px; height: 32px; margin-right: 5px;"></a>`).join("")
+          : "No Photos";
+      } catch {
         photosCell.innerText = "Error";
       }
     }
   }
 
-  // Set up a MutationObserver to watch for table changes
-  function observeTableChanges() {
-    const container = document.body; // Observing the entire body for simplicity
-    const observer = new MutationObserver(() => {
-      const leaderboardTable = document.querySelector(leaderboardTableSelector);
-      if (leaderboardTable) {
-        addPhotosColumn(); // Re-run the logic when the table is found or changes
-      }
-    });
+  async function addPhotosToPopup() {
+    if (isUpdatingPopup) return; // Prevent callbacks to this method while updating
+    isUpdatingPopup = true;
 
-    observer.observe(container, {
-      childList: true, // Detect added/removed child nodes
-      subtree: true, // Observe all descendants
-    });
+    try {
+      const popup = document.querySelector(popupSelector);
+      if (!popup) return;
+
+      const segmentLink = popup.querySelector('[class^="SegmentDetailsPopup"] a');
+      if (!segmentLink) return;
+
+      const segmentIdMatch = segmentLink.href.match(/segments\/(\d+)/);
+      if (!segmentIdMatch) return;
+      const segmentId = segmentIdMatch[1];
+
+      // Create the images container
+      const imagesContainer = document.createElement("div");
+      imagesContainer.style.display = "flex"; // Ensure it aligns well with flex parent
+      imagesContainer.style.flexDirection = "column"; // Stack images container above the button
+      imagesContainer.style.width = "100%"; // Take full width
+      imagesContainer.style.maxHeight = "160px";
+      imagesContainer.style.overflowY = "auto"; // Scroll when needed
+      imagesContainer.style.padding = "5px";
+      imagesContainer.style.border = "1px solid #ccc";
+      imagesContainer.style.background = "#fff"; // Ensure visibility
+      imagesContainer.style.borderRadius = "5px";
+      imagesContainer.style.marginBottom = "10px"; // Space between images and button
+
+      // Create an inner grid for images
+      const imagesGrid = document.createElement("div");
+      imagesGrid.style.display = "grid";
+      imagesGrid.style.gridTemplateColumns = "repeat(auto-fill, minmax(32px, 1fr))"; // Responsive columns
+      imagesGrid.style.gridAutoRows = "32px"; // Fixed row height
+      imagesGrid.style.gap = "5px";
+      imagesGrid.style.width = "100%";
+
+      // Add grid inside container
+      imagesContainer.appendChild(imagesGrid);
+
+      // Insert imagesContainer into the correct parent
+      const segmentParent = segmentLink.parentElement.parentElement;
+      if (segmentParent) {
+          segmentParent.insertBefore(imagesContainer, segmentParent.firstChild);
+      }
+
+      const effortsResponse = await fetch(`https://www.strava.com/segments/${segmentId}`);
+      const effortsHtml = await effortsResponse.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(effortsHtml, "text/html");
+      const effortLinks = doc.querySelectorAll('a[href*="/segment_efforts/"]');
+      for (const link of effortLinks) {
+        const effortUrl = link.getAttribute("href");
+        const activityBody = await getActivityFromSegmentEffort(effortUrl);
+        const photos = getPhotosFromActivityBody(activityBody);
+
+        // Append images inside the container
+        photos.forEach(photoUrl => {
+          const link = document.createElement("a");
+          link.href = photoUrl;
+          link.target = "_blank"; // Opens in a new tab/window
+
+          const img = document.createElement("img");
+          img.src = photoUrl;
+          img.style.width = "100%";
+          img.style.height = "100%";
+          img.style.objectFit = "cover"; // Ensures proper fitting
+
+          link.appendChild(img);
+          imagesGrid.appendChild(link);
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching popup photos:", error);
+    } finally {
+      isUpdatingPopup = false;
+    }
   }
 
-  // Helper: Get activity from a segment effort link
   async function getActivityFromSegmentEffort(segmentEffortUrl) {
-    const fullUrl = `https://www.strava.com${segmentEffortUrl}`;
-    const response = await fetch(fullUrl);
-    const activityUrl = response.url; // Follows the redirect to the activity page
-    const match = activityUrl.match(/activities\/(\d+)/);
+    const response = await fetch(`https://www.strava.com${segmentEffortUrl}`);
+    const match = response.url.match(/activities\/(\d+)/);
     if (!match) throw new Error("Activity ID not found");
-
     return response.text();
   }
 
-  // Helper: Get photos from activity page
   function getPhotosFromActivityBody(activityBody) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(activityBody, "text/html");
-
     const div = doc.querySelector("div[data-react-class='MediaThumbnailList']");
-    if (!div) {
-      return [];
-    }
-
-    // Parse the `data-react-props` attribute
+    if (!div) return [];
     const data = JSON.parse(div.getAttribute("data-react-props"));
-
-    // Extract the image URLs
-    const imageUrls = data.items.map(item => item.large); // Change 'large' to 'thumbnail' if needed
-
-    return imageUrls;
+    return data.items.map(item => item.large);
   }
 
-  // Initial run and start observing
-  addPhotosColumn();
-  observeTableChanges();
+  function observeChanges() {
+    const observer = new MutationObserver(() => {
+      addPhotosToLeaderboard();
+      addPhotosToPopup();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  addPhotosToLeaderboard();
+  addPhotosToPopup();
+  observeChanges();
 })();

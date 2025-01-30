@@ -2,6 +2,10 @@ This Chrome extension adds a Photos column to the Strava segment leaderboard pag
 
 ![](images/screenshot.jpeg)
 
+It also adds any available photos from top segment efforts directly over the map display on Strava:
+
+![](images/screenshot-map-view.png)
+
 ## Installation Instructions
 
 As a Chrome extension:
